@@ -1,3 +1,4 @@
+const API_URL = window.location.origin;
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const number = new Intl.NumberFormat("en-US");
 const $ = (id) => document.getElementById(id);
@@ -39,7 +40,7 @@ function setConnection(connected) {
 }
 
 async function loadInitial() {
-  const response = await fetch("/api/taxi");
+  const response = await fetch(`${API_URL}/api/taxi`);
   if (!response.ok) {
     let details = "";
     try {
@@ -54,7 +55,7 @@ async function loadInitial() {
 }
 
 function connect() {
-  const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  const socket = new WebSocket(`${API_URL.replace("https://", "wss://")}/ws`);
   socket.addEventListener("open", () => setConnection(true));
   socket.addEventListener("message", (event) => {
     try {
