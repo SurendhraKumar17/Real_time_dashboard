@@ -13,7 +13,10 @@ const maxPortAttempts = 20;
 const datasetPath = join(root, "yellow_tripdata_sample.csv");
 const refreshMs = 5_000;
 const batchSize = 5_000;
-const allowedOrigin = process.env.FRONTEND_URL || "*";
+const configuredOrigin = process.env.FRONTEND_URL?.trim();
+const allowedOrigin = configuredOrigin && !configuredOrigin.includes("your-netlify-site")
+  ? configuredOrigin
+  : "https://real-time-dashboard1.netlify.app";
 let currentSnapshot = null;
 let lastApiError = null;
 let csvIterator = null;
