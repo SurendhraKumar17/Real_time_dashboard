@@ -13,6 +13,7 @@ const maxPortAttempts = 20;
 const datasetPath = join(root, "yellow_tripdata_sample.csv");
 const refreshMs = 5_000;
 const batchSize = 5_000;
+const allowedOrigin = process.env.FRONTEND_URL || "*";
 let currentSnapshot = null;
 let lastApiError = null;
 let csvIterator = null;
@@ -145,6 +146,15 @@ function contentType(path) {
 }
 
 const server = createServer(async (request, response) => {
+  response.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  response.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (request.method === "OPTIONS") {
+    response.writeHead(204);
+    response.end();
+    return;
+  }
+
   if (request.url === "/api/taxi") {
     if (!currentSnapshot) {
       response.writeHead(503, { "Content-Type": "application/json" });

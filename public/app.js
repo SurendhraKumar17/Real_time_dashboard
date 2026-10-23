@@ -1,4 +1,4 @@
-const API_URL = window.location.origin;
+const API_URL = "https://real-time-dashboard-h823.onrender.com";
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const number = new Intl.NumberFormat("en-US");
 const $ = (id) => document.getElementById(id);
@@ -55,7 +55,10 @@ async function loadInitial() {
 }
 
 function connect() {
-  const socket = new WebSocket(`${API_URL.replace("https://", "wss://")}/ws`);
+  const socketUrl = new URL(API_URL);
+  socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
+  socketUrl.pathname = "/ws";
+  const socket = new WebSocket(socketUrl);
   socket.addEventListener("open", () => setConnection(true));
   socket.addEventListener("message", (event) => {
     try {
