@@ -10,7 +10,7 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(root, "public");
 const preferredPort = Number(process.env.PORT || 3000);
 const maxPortAttempts = 20;
-const datasetPath = join(root, "yellow_tripdata_2015-01.csv");
+const datasetPath = join(root, "yellow_tripdata_sample.csv");
 const refreshMs = 5_000;
 const batchSize = 5_000;
 let currentSnapshot = null;
@@ -69,7 +69,7 @@ function buildSnapshot(records) {
   return {
     timestamp: new Date().toISOString(),
     source: "Local NYC TLC Yellow Taxi Trip Records (January 2015)",
-    sourceUrl: "/yellow_tripdata_2015-01.csv",
+    sourceUrl: "/yellow_tripdata_sample.csv",
     recordsFetched: records.length,
     campaigns: rows,
     totals: {
