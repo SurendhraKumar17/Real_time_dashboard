@@ -1,17 +1,14 @@
 import { createServer } from "node:http";
-import { createReadStream } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createInterface } from "node:readline";
 import { WebSocketServer } from "ws";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(root, "public");
 const preferredPort = Number(process.env.PORT || 3000);
 const maxPortAttempts = 20;
-const datasetFile = process.env.DATASET_FILE || "yellow_tripdata_2015-01.csv";
-const datasetPath = join(root, datasetFile);
+const batchesFile = process.env.BATCHES_FILE || "full_dataset_batches.json";
 const refreshMs = 5_000;
 const batchSize = 5_000;
 const configuredOrigin = process.env.FRONTEND_URL?.trim();
@@ -20,111 +17,25 @@ const allowedOrigin = configuredOrigin && !configuredOrigin.includes("your-netli
   : "https://real-time-dashboard1.netlify.app";
 let currentSnapshot = null;
 let lastApiError = null;
-let csvIterator = null;
 let batchNumber = 0;
 let refreshInProgress = false;
-
-function asNumber(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
-}
-
-function createEmptyBuckets() {
-  return new Map();
-}
-
-function addRecord(buckets, values) {
-  const key = String(values[11] || "Unknown");
-  const labels = {
-    "1": "Credit card",
-    "2": "Cash",
-    "3": "No charge",
-    "4": "Dispute",
-    "5": "Unknown",
-    "6": "Voided trip"
-  };
-  const bucket = buckets.get(key) || {
-    id: key,
-    name: labels[key] || `Payment type ${key}`,
-    channel: "Payment method",
-    trips: 0,
-    passengers: 0,
-    distance: 0,
-    revenue: 0,
-    fare: 0
-  };
-  bucket.trips += 1;
-  bucket.passengers += asNumber(values[3]);
-  bucket.distance += asNumber(values[4]);
-  bucket.revenue += asNumber(values[18]);
-  bucket.fare += asNumber(values[12]);
-  buckets.set(key, bucket);
-}
-
-function buildSnapshot(buckets, recordsFetched, currentBatchNumber) {
-  const campaigns = [...buckets.values()]
-    .sort((a, b) => b.trips - a.trips)
-    .map((bucket) => ({
-      ...bucket,
-      averageFare: bucket.trips ? bucket.fare / bucket.trips : 0,
-      averageDistance: bucket.trips ? bucket.distance / bucket.trips : 0,
-      averagePassengers: bucket.trips ? bucket.passengers / bucket.trips : 0
-    }));
-  const totals = campaigns.reduce((result, row) => {
-    for (const key of ["trips", "passengers", "distance", "revenue", "fare"]) result[key] += row[key];
-    return result;
-  }, { trips: 0, passengers: 0, distance: 0, revenue: 0, fare: 0 });
-
-  return {
-    timestamp: new Date().toISOString(),
-    source: "Local NYC TLC Yellow Taxi Trip Records (January 2015)",
-    sourceUrl: `/${datasetFile}`,
-    recordsFetched,
-    batchNumber: currentBatchNumber,
-    batchStart: (currentBatchNumber - 1) * batchSize + 1,
-    batchEnd: currentBatchNumber * batchSize,
-    campaigns,
-    totals: {
-      trips: totals.trips,
-      passengers: totals.passengers,
-      distance: totals.distance,
-      revenue: totals.revenue,
-      averageFare: totals.trips ? totals.fare / totals.trips : 0,
-      averageDistance: totals.trips ? totals.distance / totals.trips : 0,
-      averagePassengers: totals.trips ? totals.passengers / totals.trips : 0
-    }
-  };
-}
-
-async function createCsvIterator() {
-  const lines = createInterface({
-    input: createReadStream(datasetPath),
-    crlfDelay: Infinity
-  });
-  const iterator = lines[Symbol.asyncIterator]();
-  await iterator.next();
-  return { iterator, lines };
-}
+let datasetBatches = null;
 
 async function readDatasetBatch() {
-  if (!csvIterator) csvIterator = await createCsvIterator();
-  const buckets = createEmptyBuckets();
-  let recordsFetched = 0;
-
-  while (recordsFetched < batchSize) {
-    const next = await csvIterator.iterator.next();
-    if (next.done) {
-      csvIterator.lines.close();
-      csvIterator = await createCsvIterator();
-      continue;
+  if (!datasetBatches) {
+    datasetBatches = JSON.parse(await readFile(join(root, batchesFile), "utf8"));
+    if (!Array.isArray(datasetBatches.batches) || datasetBatches.batches.length === 0) {
+      throw new Error(`Invalid batch dataset: ${batchesFile}`);
     }
-    const values = next.value.split(",");
-    if (values.length < 19) continue;
-    addRecord(buckets, values);
-    recordsFetched += 1;
   }
+  const batch = datasetBatches.batches[batchNumber % datasetBatches.batches.length];
   batchNumber += 1;
-  return buildSnapshot(buckets, recordsFetched, batchNumber);
+  return {
+    ...batch,
+    timestamp: new Date().toISOString(),
+    source: datasetBatches.source,
+    sourceUrl: datasetBatches.sourceUrl
+  };
 }
 
 function broadcast() {
@@ -141,7 +52,7 @@ async function refreshTaxiData() {
   try {
   currentSnapshot = await readDatasetBatch();
   lastApiError = null;
-  console.log(`Loaded batch of ${currentSnapshot.recordsFetched} trips from ${datasetFile}.`);
+  console.log(`Loaded batch ${currentSnapshot.batchNumber} (${currentSnapshot.batchStart}-${currentSnapshot.batchEnd}) from full dataset.`);
   broadcast();
   } finally {
     refreshInProgress = false;
