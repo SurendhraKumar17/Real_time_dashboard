@@ -1,28 +1,124 @@
 import { createServer } from "node:http";
+import { createReadStream } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createInterface } from "node:readline";
 import { WebSocketServer } from "ws";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(root, "public");
 const preferredPort = Number(process.env.PORT || 3000);
 const maxPortAttempts = 20;
-const snapshotFile = process.env.SNAPSHOT_FILE || "full_dataset_snapshot.json";
+const datasetFile = process.env.DATASET_FILE || "yellow_tripdata_sample.csv";
+const datasetPath = join(root, datasetFile);
+const refreshMs = 5_000;
+const batchSize = 5_000;
 const configuredOrigin = process.env.FRONTEND_URL?.trim();
 const allowedOrigin = configuredOrigin && !configuredOrigin.includes("your-netlify-site")
   ? configuredOrigin
   : "https://real-time-dashboard1.netlify.app";
 let currentSnapshot = null;
 let lastApiError = null;
+let csvIterator = null;
 
-async function readSnapshot() {
-  const snapshotPath = join(root, snapshotFile);
-  const snapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
-  if (!Number.isInteger(snapshot.recordsFetched) || !Array.isArray(snapshot.campaigns)) {
-    throw new Error(`Invalid dashboard snapshot: ${snapshotFile}`);
+function asNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function createEmptyBuckets() {
+  return new Map();
+}
+
+function addRecord(buckets, values) {
+  const key = String(values[11] || "Unknown");
+  const labels = {
+    "1": "Credit card",
+    "2": "Cash",
+    "3": "No charge",
+    "4": "Dispute",
+    "5": "Unknown",
+    "6": "Voided trip"
+  };
+  const bucket = buckets.get(key) || {
+    id: key,
+    name: labels[key] || `Payment type ${key}`,
+    channel: "Payment method",
+    trips: 0,
+    passengers: 0,
+    distance: 0,
+    revenue: 0,
+    fare: 0
+  };
+  bucket.trips += 1;
+  bucket.passengers += asNumber(values[3]);
+  bucket.distance += asNumber(values[4]);
+  bucket.revenue += asNumber(values[18]);
+  bucket.fare += asNumber(values[12]);
+  buckets.set(key, bucket);
+}
+
+function buildSnapshot(buckets, recordsFetched) {
+  const campaigns = [...buckets.values()]
+    .sort((a, b) => b.trips - a.trips)
+    .map((bucket) => ({
+      ...bucket,
+      averageFare: bucket.trips ? bucket.fare / bucket.trips : 0,
+      averageDistance: bucket.trips ? bucket.distance / bucket.trips : 0,
+      averagePassengers: bucket.trips ? bucket.passengers / bucket.trips : 0
+    }));
+  const totals = campaigns.reduce((result, row) => {
+    for (const key of ["trips", "passengers", "distance", "revenue", "fare"]) result[key] += row[key];
+    return result;
+  }, { trips: 0, passengers: 0, distance: 0, revenue: 0, fare: 0 });
+
+  return {
+    timestamp: new Date().toISOString(),
+    source: "Local NYC TLC Yellow Taxi Trip Records (January 2015)",
+    sourceUrl: `/${datasetFile}`,
+    recordsFetched,
+    campaigns,
+    totals: {
+      trips: totals.trips,
+      passengers: totals.passengers,
+      distance: totals.distance,
+      revenue: totals.revenue,
+      averageFare: totals.trips ? totals.fare / totals.trips : 0,
+      averageDistance: totals.trips ? totals.distance / totals.trips : 0,
+      averagePassengers: totals.trips ? totals.passengers / totals.trips : 0
+    }
+  };
+}
+
+async function createCsvIterator() {
+  const lines = createInterface({
+    input: createReadStream(datasetPath),
+    crlfDelay: Infinity
+  });
+  const iterator = lines[Symbol.asyncIterator]();
+  await iterator.next();
+  return { iterator, lines };
+}
+
+async function readDatasetBatch() {
+  if (!csvIterator) csvIterator = await createCsvIterator();
+  const buckets = createEmptyBuckets();
+  let recordsFetched = 0;
+
+  while (recordsFetched < batchSize) {
+    const next = await csvIterator.iterator.next();
+    if (next.done) {
+      csvIterator.lines.close();
+      csvIterator = await createCsvIterator();
+      continue;
+    }
+    const values = next.value.split(",");
+    if (values.length < 19) continue;
+    addRecord(buckets, values);
+    recordsFetched += 1;
   }
-  return snapshot;
+  return buildSnapshot(buckets, recordsFetched);
 }
 
 function broadcast() {
@@ -31,6 +127,13 @@ function broadcast() {
   for (const client of socketServer.clients) {
     if (client.readyState === 1) client.send(message);
   }
+}
+
+async function refreshTaxiData() {
+  currentSnapshot = await readDatasetBatch();
+  lastApiError = null;
+  console.log(`Loaded batch of ${currentSnapshot.recordsFetched} trips from ${datasetFile}.`);
+  broadcast();
 }
 
 function contentType(path) {
@@ -59,7 +162,7 @@ const server = createServer(async (request, response) => {
   if (request.url === "/api/taxi") {
     if (!currentSnapshot) {
       response.writeHead(503, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ error: lastApiError || "Full taxi dataset is still loading" }));
+      response.end(JSON.stringify({ error: lastApiError || "Taxi data is still loading" }));
       return;
     }
     response.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -87,17 +190,17 @@ const server = createServer(async (request, response) => {
 const socketServer = new WebSocketServer({ server, path: "/ws" });
 socketServer.on("connection", (socket) => {
   if (currentSnapshot) socket.send(JSON.stringify({ type: "snapshot", data: currentSnapshot }));
-  else socket.send(JSON.stringify({ type: "status", message: lastApiError || "Loading full NYC Taxi dataset" }));
+  else socket.send(JSON.stringify({ type: "status", message: lastApiError || "Loading NYC Taxi data" }));
 });
 
-readSnapshot().then((snapshot) => {
-  currentSnapshot = snapshot;
-  console.log(`Loaded ${snapshot.recordsFetched} trips from ${snapshotFile}.`);
-  broadcast();
-}).catch((error) => {
+refreshTaxiData().catch((error) => {
   lastApiError = error.message;
-  console.error(`Unable to load dashboard snapshot: ${error.message}`);
+  console.error(`Unable to load NYC Taxi data: ${error.message}`);
 });
+setInterval(() => refreshTaxiData().catch((error) => {
+  lastApiError = error.message;
+  console.error(`Unable to refresh NYC Taxi data: ${error.message}`);
+}), refreshMs);
 
 function startServer(portToTry) {
   server.once("error", (error) => {
