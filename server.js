@@ -10,7 +10,7 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(root, "public");
 const preferredPort = Number(process.env.PORT || 3000);
 const maxPortAttempts = 20;
-const datasetFile = process.env.DATASET_FILE || "yellow_tripdata_sample.csv";
+const datasetFile = process.env.DATASET_FILE || "yellow_tripdata_2015-01.csv";
 const datasetPath = join(root, datasetFile);
 const refreshMs = 5_000;
 const batchSize = 5_000;
@@ -21,6 +21,8 @@ const allowedOrigin = configuredOrigin && !configuredOrigin.includes("your-netli
 let currentSnapshot = null;
 let lastApiError = null;
 let csvIterator = null;
+let batchNumber = 0;
+let refreshInProgress = false;
 
 function asNumber(value) {
   const number = Number(value);
@@ -59,7 +61,7 @@ function addRecord(buckets, values) {
   buckets.set(key, bucket);
 }
 
-function buildSnapshot(buckets, recordsFetched) {
+function buildSnapshot(buckets, recordsFetched, currentBatchNumber) {
   const campaigns = [...buckets.values()]
     .sort((a, b) => b.trips - a.trips)
     .map((bucket) => ({
@@ -78,6 +80,9 @@ function buildSnapshot(buckets, recordsFetched) {
     source: "Local NYC TLC Yellow Taxi Trip Records (January 2015)",
     sourceUrl: `/${datasetFile}`,
     recordsFetched,
+    batchNumber: currentBatchNumber,
+    batchStart: (currentBatchNumber - 1) * batchSize + 1,
+    batchEnd: currentBatchNumber * batchSize,
     campaigns,
     totals: {
       trips: totals.trips,
@@ -118,7 +123,8 @@ async function readDatasetBatch() {
     addRecord(buckets, values);
     recordsFetched += 1;
   }
-  return buildSnapshot(buckets, recordsFetched);
+  batchNumber += 1;
+  return buildSnapshot(buckets, recordsFetched, batchNumber);
 }
 
 function broadcast() {
@@ -130,10 +136,16 @@ function broadcast() {
 }
 
 async function refreshTaxiData() {
+  if (refreshInProgress) return;
+  refreshInProgress = true;
+  try {
   currentSnapshot = await readDatasetBatch();
   lastApiError = null;
   console.log(`Loaded batch of ${currentSnapshot.recordsFetched} trips from ${datasetFile}.`);
   broadcast();
+  } finally {
+    refreshInProgress = false;
+  }
 }
 
 function contentType(path) {
