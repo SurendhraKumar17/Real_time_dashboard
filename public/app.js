@@ -86,11 +86,12 @@ function render(data) {
   `).join("");
   const point = {
     batchNumber: data.batchNumber || trendHistory.length + 1,
+    pointKey: data.batchNumber || data.batchStart || data.timestamp || trendHistory.length + 1,
     revenue: Number(data.totals.revenue) || 0,
     trips: Number(data.totals.trips) || 0
   };
   const existingPoint = trendHistory[trendHistory.length - 1];
-  if (!existingPoint || existingPoint.batchNumber !== point.batchNumber) {
+  if (!existingPoint || existingPoint.pointKey !== point.pointKey) {
     trendHistory.push(point);
     if (trendHistory.length > maxTrendPoints) trendHistory.shift();
     renderTrend();
@@ -103,7 +104,7 @@ function setConnection(connected) {
 }
 
 async function loadInitial() {
-  const response = await fetch(`${API_URL}/api/taxi`);
+  const response = await fetch(`${API_URL}/api/taxi?updated=${Date.now()}`, { cache: "no-store" });
   if (!response.ok) {
     let details = "";
     try {
