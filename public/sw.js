@@ -1,4 +1,4 @@
-const CACHE_NAME = "pulse-bi-shell-v1";
+const CACHE_NAME = "pulse-bi-shell-v4";
 const APP_SHELL = [
   "/",
   "/index.html",

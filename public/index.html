@@ -23,7 +23,7 @@
       <section class="metrics" aria-label="Campaign summary">
         <article class="metric-card"><span>Total fare revenue</span><strong id="revenue">$0</strong><small class="positive">From latest 5,000 records</small></article>
         <article class="metric-card"><span>Taxi trips</span><strong id="spend">0</strong><small>Grouped by payment method</small></article>
-        <article class="metric-card"><span>Records analyzed</span><strong id="conversions">0</strong><small class="positive">From local January 2015 data</small></article>
+        <article class="metric-card"><span>Records in current batch</span><strong id="conversions">0</strong><small class="positive">Waiting for batch 1</small></article>
         <article class="metric-card"><span>Avg. trip distance</span><strong id="roas">0.00 mi</strong><small>Per taxi trip</small></article>
       </section>
       <section class="dashboard-grid">
@@ -34,10 +34,24 @@
         <aside class="panel insight-panel">
           <div class="panel-heading"><div><p class="eyebrow">OPERATIONAL INSIGHT</p><h2>What is happening?</h2></div><span class="spark">✦</span></div>
           <div class="insight"><span class="insight-icon">↗</span><div><strong>Average fare in this sample</strong><p>The latest taxi records show an average fare of <b id="top-roas">$0</b> per trip.</p></div></div>
-          <div class="insight"><span class="insight-icon blue">◉</span><div><strong>Local dataset stream</strong><p>Each update reads the next 5,000 real trip records from the supplied CSV file.</p></div></div>
-          <div class="volume-box"><div class="volume-label"><span>Trip volume by payment type</span><b>LIVE SAMPLE</b></div><div class="volume-strip" id="volume-strip"></div></div>
-          <div class="query"><span>Dataset</span><div>yellow_tripdata_sample.csv <b>LOCAL</b></div></div>
+          <div class="insight"><span class="insight-icon blue">◉</span><div><strong>Full dataset stream</strong><p>Each update reads the next 5,000 records from the original January 2015 CSV.</p></div></div>
+          <div class="volume-box"><div class="volume-label"><span>Trip volume by payment type</span><b>LIVE BATCH</b></div><div class="volume-strip" id="volume-strip"></div></div>
+          <div class="query"><span>Dataset</span><div>yellow_tripdata_2015-01.csv <b>LOCAL</b></div></div>
         </aside>
+      </section>
+      <section class="panel trend-panel" aria-labelledby="trend-title">
+        <div class="panel-heading">
+          <div><p class="eyebrow">REVENUE TREND</p><h2 id="trend-title">Revenue by batch</h2></div>
+          <div class="chart-legend"><span><i class="legend-revenue"></i>Batch revenue</span></div>
+        </div>
+        <div class="trend-chart">
+          <svg id="trend-chart" role="img" aria-label="Revenue by batch" viewBox="0 0 900 260" preserveAspectRatio="none"></svg>
+        </div>
+        <p class="chart-caption" id="trend-caption">Waiting for live batch data.</p>
+        <div class="trend-explanation" aria-live="polite">
+          <strong>What this means</strong>
+          <p id="trend-explanation-text">The dashboard is waiting for enough batches to identify a trend.</p>
+        </div>
       </section>
       <footer><span>WebSocket operational analytics prototype</span><span>Local CSV dataset · Node.js backend · PWA ready</span></footer>
     </main>

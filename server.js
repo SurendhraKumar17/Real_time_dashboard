@@ -1,16 +1,14 @@
 import { createServer } from "node:http";
-import { createReadStream } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createInterface } from "node:readline";
 import { WebSocketServer } from "ws";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(root, "public");
 const preferredPort = Number(process.env.PORT || 3000);
 const maxPortAttempts = 20;
-const datasetPath = join(root, "yellow_tripdata_sample.csv");
+const batchesFile = process.env.BATCHES_FILE || "full_dataset_batches.json";
 const refreshMs = 5_000;
 const batchSize = 5_000;
 const configuredOrigin = process.env.FRONTEND_URL?.trim();
@@ -19,112 +17,32 @@ const allowedOrigin = configuredOrigin && !configuredOrigin.includes("your-netli
   : "https://real-time-dashboard1.netlify.app";
 let currentSnapshot = null;
 let lastApiError = null;
-let csvIterator = null;
-
-function asNumber(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
-}
-
-function buildSnapshot(records) {
-  const buckets = new Map();
-  for (const record of records) {
-    const key = String(record.payment_type || "Unknown");
-    const labels = {
-      "1": "Credit card",
-      "2": "Cash",
-      "3": "No charge",
-      "4": "Dispute",
-      "5": "Unknown",
-      "6": "Voided trip"
-    };
-    const bucket = buckets.get(key) || {
-      id: key,
-      name: labels[key] || `Payment type ${key}`,
-      channel: "Payment method",
-      trips: 0,
-      passengers: 0,
-      distance: 0,
-      revenue: 0,
-      fare: 0
-    };
-    bucket.trips += 1;
-    bucket.passengers += asNumber(record.passenger_count);
-    bucket.distance += asNumber(record.trip_distance);
-    bucket.revenue += asNumber(record.total_amount);
-    bucket.fare += asNumber(record.fare_amount);
-    buckets.set(key, bucket);
-  }
-
-  const rows = [...buckets.values()]
-    .sort((a, b) => b.trips - a.trips)
-    .slice(0, 8)
-    .map((bucket) => ({
-      ...bucket,
-      averageFare: bucket.trips ? bucket.fare / bucket.trips : 0,
-      averageDistance: bucket.trips ? bucket.distance / bucket.trips : 0,
-      averagePassengers: bucket.trips ? bucket.passengers / bucket.trips : 0
-    }));
-  const totals = rows.reduce((result, row) => {
-    for (const key of ["trips", "passengers", "distance", "revenue"]) result[key] += row[key];
-    return result;
-  }, { trips: 0, passengers: 0, distance: 0, revenue: 0 });
-
-  return {
-    timestamp: new Date().toISOString(),
-    source: "Local NYC TLC Yellow Taxi Trip Records (January 2015)",
-    sourceUrl: "/yellow_tripdata_sample.csv",
-    recordsFetched: records.length,
-    campaigns: rows,
-    totals: {
-      ...totals,
-      averageFare: totals.trips ? rows.reduce((sum, row) => sum + row.fare, 0) / totals.trips : 0,
-      averageDistance: totals.trips ? totals.distance / totals.trips : 0,
-      averagePassengers: totals.trips ? totals.passengers / totals.trips : 0
-    }
-  };
-}
-
-async function createCsvIterator() {
-  const lines = createInterface({
-    input: createReadStream(datasetPath),
-    crlfDelay: Infinity
-  });
-  const iterator = lines[Symbol.asyncIterator]();
-  await iterator.next();
-  return { iterator, lines };
-}
+let batchNumber = 0;
+let refreshInProgress = false;
+let datasetBatches = null;
 
 async function readDatasetBatch() {
-  if (!csvIterator) csvIterator = await createCsvIterator();
-  const records = [];
-  while (records.length < batchSize) {
-    const next = await csvIterator.iterator.next();
-    if (next.done) {
-      csvIterator.lines.close();
-      csvIterator = await createCsvIterator();
-      continue;
+  if (!datasetBatches) {
+    datasetBatches = JSON.parse(await readFile(join(root, batchesFile), "utf8"));
+    if (!Array.isArray(datasetBatches.batches) || datasetBatches.batches.length === 0) {
+      throw new Error(`Invalid batch dataset: ${batchesFile}`);
     }
-    const values = next.value.split(",");
-    if (values.length < 19) continue;
-    records.push({
-      tpep_pickup_datetime: values[1],
-      passenger_count: values[3],
-      trip_distance: values[4],
-      payment_type: values[11],
-      fare_amount: values[12],
-      total_amount: values[18]
-    });
   }
-  return records;
-}
-
-async function refreshTaxiData() {
-  const records = await readDatasetBatch();
-  currentSnapshot = buildSnapshot(records);
-  lastApiError = null;
-  console.log(`Loaded ${records.length} trips from local dataset.`);
-  broadcast();
+  const batch = datasetBatches.batches[batchNumber % datasetBatches.batches.length];
+  batchNumber += 1;
+  return {
+    ...batch,
+    charts: {
+      averageFareByPaymentMethod: batch.campaigns.map((campaign) => ({
+        name: campaign.name,
+        averageFare: campaign.averageFare,
+        trips: campaign.trips
+      }))
+    },
+    timestamp: new Date().toISOString(),
+    source: datasetBatches.source,
+    sourceUrl: datasetBatches.sourceUrl
+  };
 }
 
 function broadcast() {
@@ -132,6 +50,19 @@ function broadcast() {
   const message = JSON.stringify({ type: "snapshot", data: currentSnapshot });
   for (const client of socketServer.clients) {
     if (client.readyState === 1) client.send(message);
+  }
+}
+
+async function refreshTaxiData() {
+  if (refreshInProgress) return;
+  refreshInProgress = true;
+  try {
+  currentSnapshot = await readDatasetBatch();
+  lastApiError = null;
+  console.log(`Loaded batch ${currentSnapshot.batchNumber} (${currentSnapshot.batchStart}-${currentSnapshot.batchEnd}) from full dataset.`);
+  broadcast();
+  } finally {
+    refreshInProgress = false;
   }
 }
 
@@ -205,16 +136,13 @@ function startServer(portToTry) {
   server.once("error", (error) => {
     if (error.code === "EADDRINUSE") {
       const nextPort = portToTry + 1;
-      if (nextPort - preferredPort > maxPortAttempts) {
-        throw error;
-      }
+      if (nextPort - preferredPort > maxPortAttempts) throw error;
       console.warn(`Port ${portToTry} is busy. Retrying on ${nextPort}...`);
       startServer(nextPort);
       return;
     }
     throw error;
   });
-
   server.listen(portToTry, () => {
     console.log(`NYC Taxi BI dashboard running at http://localhost:${portToTry}`);
   });
