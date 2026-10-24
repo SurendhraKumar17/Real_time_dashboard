@@ -1,4 +1,7 @@
-const API_URL = "https://real-time-dashboard-h823.onrender.com";
+const deployedApiUrl = "https://real-time-dashboard-h823.onrender.com";
+const isLocalHost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+const API_URL = isLocalHost ? window.location.origin : deployedApiUrl;
+const refreshMs = 5_000;
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const number = new Intl.NumberFormat("en-US");
 const $ = (id) => document.getElementById(id);
@@ -21,6 +24,8 @@ function render(data) {
   $("roas").textContent = `${formatDecimal(data.totals.averageDistance)} mi`;
   $("updated-at").textContent = new Date(data.timestamp).toLocaleTimeString();
   $("top-roas").textContent = money.format(data.totals.averageFare);
+  $("conversions").parentElement.querySelector("small").textContent =
+    `Batch ${number.format(data.batchNumber || 1)} · records ${number.format(data.batchStart || 1)}-${number.format(data.batchEnd || data.recordsFetched)}`;
   $("campaign-rows").innerHTML = data.campaigns.map((campaign) => `
     <tr><td><strong>${campaign.name}</strong></td><td><span class="channel">${campaign.channel}</span></td>
     <td>${number.format(campaign.trips)}</td><td>${formatDecimal(campaign.averageDistance)} mi</td>
@@ -54,6 +59,14 @@ async function loadInitial() {
   render(await response.json());
 }
 
+async function refreshSnapshot() {
+  try {
+    await loadInitial();
+  } catch (error) {
+    console.error("Unable to refresh dashboard data.", error);
+  }
+}
+
 function connect() {
   const socketUrl = new URL(API_URL);
   socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
@@ -79,3 +92,4 @@ loadInitial().catch((error) => {
   setConnection(false);
   console.error(error);
 }).then(connect);
+setInterval(refreshSnapshot, refreshMs);
