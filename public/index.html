@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#101828" />
+    <meta name="description" content="Real-time NYC Taxi operational analytics dashboard" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+    <title>Pulse BI | NYC Taxi Operations</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand"><span class="brand-mark">P</span><div><strong>Pulse BI</strong><small>NYC taxi operations</small></div></div>
+        <div class="connection"><span id="status-dot" class="status-dot"></span><span id="connection-status">Connecting</span><span class="live-pill">LIVE</span></div>
+      </header>
+      <section class="hero">
+        <div><p class="eyebrow">REAL-TIME OPERATIONS CENTER</p><h1>Taxi intelligence,<br /><span>in the moment.</span></h1><p class="subheading">Monitor New York City taxi demand and revenue with streaming operational analytics.</p><div class="hero-tags"><span>● LOCAL CSV DATASET</span><span>↗ NEW BATCH EVERY 5 SEC</span></div></div>
+        <div class="updated">Last updated <strong id="updated-at">--:--:--</strong></div>
+      </section>
+      <section class="metrics" aria-label="Campaign summary">
+        <article class="metric-card"><span>Total fare revenue</span><strong id="revenue">$0</strong><small class="positive">From latest 5,000 records</small></article>
+        <article class="metric-card"><span>Taxi trips</span><strong id="spend">0</strong><small>Grouped by payment method</small></article>
+        <article class="metric-card"><span>Records analyzed</span><strong id="conversions">0</strong><small class="positive">From local January 2015 data</small></article>
+        <article class="metric-card"><span>Avg. trip distance</span><strong id="roas">0.00 mi</strong><small>Per taxi trip</small></article>
+      </section>
+      <section class="dashboard-grid">
+        <article class="panel campaign-panel">
+          <div class="panel-heading"><div><p class="eyebrow">TAXI TRIP MONITOR</p><h2>Operations by payment method</h2></div><span class="streaming"><i></i> CSV stream</span></div>
+          <div class="table-wrap"><table><thead><tr><th>Payment method</th><th>Source</th><th>Trips</th><th>Avg. distance</th><th>Passengers</th><th>Revenue</th></tr></thead><tbody id="campaign-rows"></tbody></table></div>
+        </article>
+        <aside class="panel insight-panel">
+          <div class="panel-heading"><div><p class="eyebrow">OPERATIONAL INSIGHT</p><h2>What is happening?</h2></div><span class="spark">✦</span></div>
+          <div class="insight"><span class="insight-icon">↗</span><div><strong>Average fare in this sample</strong><p>The latest taxi records show an average fare of <b id="top-roas">$0</b> per trip.</p></div></div>
+          <div class="insight"><span class="insight-icon blue">◉</span><div><strong>Local dataset stream</strong><p>Each update reads the next 5,000 real trip records from the supplied CSV file.</p></div></div>
+          <div class="volume-box"><div class="volume-label"><span>Trip volume by payment type</span><b>LIVE SAMPLE</b></div><div class="volume-strip" id="volume-strip"></div></div>
+          <div class="query"><span>Dataset</span><div>yellow_tripdata_sample.csv <b>LOCAL</b></div></div>
+        </aside>
+      </section>
+      <footer><span>WebSocket operational analytics prototype</span><span>Local CSV dataset · Node.js backend · PWA ready</span></footer>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

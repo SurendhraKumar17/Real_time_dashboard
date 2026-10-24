@@ -1,0 +1,82 @@
+{
+  "timestamp": "2026-10-24T04:15:10.052Z",
+  "source": "Local NYC TLC Yellow Taxi Trip Records (January 2015)",
+  "sourceUrl": "/full_dataset_snapshot.json",
+  "recordsFetched": 12748986,
+  "campaigns": [
+    {
+      "id": "1",
+      "name": "Credit card",
+      "channel": "Payment method",
+      "trips": 7881388,
+      "passengers": 13120409,
+      "distance": 42408202.41999834,
+      "revenue": 133181231.52436018,
+      "fare": 98527515.16007847,
+      "averageFare": 12.501289767751373,
+      "averageDistance": 5.380803789890606,
+      "averagePassengers": 1.6647332931712029
+    },
+    {
+      "id": "2",
+      "name": "Cash",
+      "channel": "Payment method",
+      "trips": 4816992,
+      "passengers": 8252704,
+      "distance": 125799974.93001372,
+      "revenue": 58845901.45555243,
+      "fare": 52739595.20999966,
+      "averageFare": 10.948657421477897,
+      "averageDistance": 26.115877902644165,
+      "averagePassengers": 1.7132484338774072
+    },
+    {
+      "id": "3",
+      "name": "No charge",
+      "channel": "Payment method",
+      "trips": 38632,
+      "passengers": 47882,
+      "distance": 1714908.3400000024,
+      "revenue": 457887.65999974293,
+      "fare": 401650.6900000017,
+      "averageFare": 10.396839148892154,
+      "averageDistance": 44.39087647546082,
+      "averagePassengers": 1.239438807206461
+    },
+    {
+      "id": "4",
+      "name": "Dispute",
+      "channel": "Payment method",
+      "trips": 11972,
+      "passengers": 16304,
+      "distance": 1667167.2000000058,
+      "revenue": 130408.09000001573,
+      "fare": 116318.27999999966,
+      "averageFare": 9.71586034079516,
+      "averageDistance": 139.2555295689948,
+      "averagePassengers": 1.3618443033745407
+    },
+    {
+      "id": "5",
+      "name": "Unknown",
+      "channel": "Payment method",
+      "trips": 2,
+      "passengers": 4,
+      "distance": 2.1,
+      "revenue": 6.8,
+      "fare": 6,
+      "averageFare": 3,
+      "averageDistance": 1.05,
+      "averagePassengers": 2
+    }
+  ],
+  "totals": {
+    "trips": 12748986,
+    "passengers": 21437303,
+    "distance": 171590254.99001208,
+    "revenue": 192615435.52991235,
+    "averageFare": 11.905659425783204,
+    "averageDistance": 13.45912961156378,
+    "averagePassengers": 1.6814908260154964
+  }
+}
