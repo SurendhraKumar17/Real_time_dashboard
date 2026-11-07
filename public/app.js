@@ -7,6 +7,7 @@ const number = new Intl.NumberFormat("en-US");
 const $ = (id) => document.getElementById(id);
 const trendHistory = [];
 const maxTrendPoints = 12;
+let currentSnapshot = null;
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch((error) => {
@@ -65,6 +66,8 @@ function renderTrend() {
 
 function render(data) {
   if (!data?.totals || !Array.isArray(data.campaigns)) return;
+  currentSnapshot = data;
+  $("export-button").disabled = false;
   $("revenue").textContent = money.format(data.totals.revenue);
   $("spend").textContent = number.format(data.totals.trips);
   $("conversions").textContent = number.format(data.recordsFetched);
@@ -96,6 +99,48 @@ function render(data) {
     if (trendHistory.length > maxTrendPoints) trendHistory.shift();
     renderTrend();
   }
+}
+
+function csvValue(value) {
+  const text = value == null ? "" : String(value);
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function exportSnapshot() {
+  if (!currentSnapshot) return;
+  const { totals, campaigns, batchNumber, batchStart, batchEnd, recordsFetched, timestamp } = currentSnapshot;
+  const rows = [
+    ["Dashboard export", "Pulse BI NYC Taxi Operations"],
+    ["Batch", batchNumber || 1],
+    ["Records", recordsFetched],
+    ["Record range", `${batchStart || 1}-${batchEnd || recordsFetched}`],
+    ["Updated", timestamp],
+    [],
+    ["Summary", "Value"],
+    ["Total fare revenue", totals.revenue],
+    ["Taxi trips", totals.trips],
+    ["Average trip distance", totals.averageDistance],
+    ["Average fare", totals.averageFare],
+    [],
+    ["Payment method", "Source", "Trips", "Average distance", "Average passengers", "Revenue"],
+    ...campaigns.map((campaign) => [
+      campaign.name,
+      campaign.channel,
+      campaign.trips,
+      campaign.averageDistance,
+      campaign.averagePassengers,
+      campaign.revenue
+    ])
+  ];
+  const csv = rows.map((row) => row.map(csvValue).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([`${csv}\r\n`], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `pulse-bi-batch-${batchNumber || 1}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function setConnection(connected) {
@@ -146,6 +191,8 @@ function connect() {
   });
   socket.addEventListener("error", () => socket.close());
 }
+
+document.getElementById("export-button").addEventListener("click", exportSnapshot);
 
 loadInitial().catch((error) => {
   setConnection(false);
